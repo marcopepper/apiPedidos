@@ -6,6 +6,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+
+import br.com.cotiinformatica.components.MessageProducerComponent;
 import br.com.cotiinformatica.domain.dtos.requests.PedidoRequest;
 import br.com.cotiinformatica.domain.dtos.responses.PedidoResponse;
 import br.com.cotiinformatica.domain.entities.Pedido;
@@ -15,17 +17,22 @@ import br.com.cotiinformatica.repositories.PedidoRepository;
 
 @Service
 public class PedidoServiceImpl implements PedidoService {
+	
 	@Autowired
-	private PedidoRepository pedidoRepository;
+	public PedidoRepository pedidoRepository;
 
 	@Autowired
-	private ModelMapper modelMapper;
+	public ModelMapper modelMapper;
+	
+	@Autowired
+	public MessageProducerComponent messageProducerComponent;
 
 	@Override
 	public PedidoResponse criar(PedidoRequest request) {
 
 		var pedido = modelMapper.map(request, Pedido.class);
-		pedidoRepository.save(pedido);
+		pedido = pedidoRepository.save(pedido);
+		messageProducerComponent.send(pedido);
 		return modelMapper.map(pedido, PedidoResponse.class);
 	}
 
