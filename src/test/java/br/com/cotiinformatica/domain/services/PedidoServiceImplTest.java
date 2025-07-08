@@ -4,7 +4,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -20,67 +22,66 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.support.TransactionCallbackWithoutResult;
+import org.springframework.transaction.support.TransactionTemplate;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.javafaker.Faker;
-import br.com.cotiinformatica.components.MessageProducerComponent;
 import br.com.cotiinformatica.domain.dtos.requests.PedidoRequest;
 import br.com.cotiinformatica.domain.dtos.responses.PedidoResponse;
+import br.com.cotiinformatica.domain.entities.OutboxMessage;
 import br.com.cotiinformatica.domain.entities.Pedido;
 import br.com.cotiinformatica.domain.exceptions.PedidoNaoEncontradoException;
+import br.com.cotiinformatica.repositories.OutboxMessageRepository;
 import br.com.cotiinformatica.repositories.PedidoRepository;
 
 public class PedidoServiceImplTest {
-
-	// Atributos
 	private PedidoServiceImpl pedidoServiceImpl;
 	private PedidoRepository pedidoRepository;
-	private MessageProducerComponent messageProducerComponent;
+	private OutboxMessageRepository outboxMessageRepository;
+	private PlatformTransactionManager transactionManager;
+	private ObjectMapper objectMapper;
 	private ModelMapper modelMapper;
 
 	@BeforeEach
 	void setUp() {
-		// Mockando os comportamentos das classes vinculadas ao service
+
 		pedidoRepository = mock(PedidoRepository.class);
-		messageProducerComponent = mock(MessageProducerComponent.class);
+		outboxMessageRepository = mock(OutboxMessageRepository.class);
+		transactionManager = mock(PlatformTransactionManager.class);
+		objectMapper = mock(ObjectMapper.class);
 		modelMapper = new ModelMapper();
-
-		// instanciando a classe de serviço que será testada
+		TransactionTemplate realTransactionTemplate = new TransactionTemplate(transactionManager);
+		TransactionTemplate transactionTemplate = spy(realTransactionTemplate);
+		doAnswer(invocation -> {
+			TransactionCallbackWithoutResult callback = invocation.getArgument(0);
+			callback.doInTransaction(mock(TransactionStatus.class));
+			return null;
+		}).when(transactionTemplate).executeWithoutResult(any());
 		pedidoServiceImpl = new PedidoServiceImpl();
-
-		// adicionando as dependências (criadas pelos mocks)
 		pedidoServiceImpl.pedidoRepository = pedidoRepository;
-		pedidoServiceImpl.messageProducerComponent = messageProducerComponent;
+		pedidoServiceImpl.outboxMessageRepository = outboxMessageRepository;
+		pedidoServiceImpl.transactionManager = transactionManager;
 		pedidoServiceImpl.modelMapper = modelMapper;
+		pedidoServiceImpl.objectMapper = objectMapper;
 	}
 
 	@Test
 	@DisplayName("Deve criar pedido com sucesso.")
-	void testCriarPedidoComSucesso() {
-
-		var request = gerarPedidoRequest(); // gerando um objeto PedidoRequesr
-		var pedido = gerarPedido(UUID.randomUUID(), request); // gerando um objeto Pedido
-
-		/*
-		 * Quando o método save for chamado com qualquer objeto do tipo Pedido, devolva
-		 * o pedido que eu criei acima
-		 */
+	void testCriarPedidoComSucesso() throws Exception {
+		var request = gerarPedidoRequest();
+		var pedido = gerarPedido(UUID.randomUUID(), request);
+		var payloadJson = "{\"pedido\":true}";
 		when(pedidoRepository.save(any(Pedido.class))).thenReturn(pedido);
-
-		/*
-		 * Executa o método da classe de serviço e captura a resposta
-		 */
+		when(objectMapper.writeValueAsString(any())).thenReturn(payloadJson);
+		// Executa a lógica do método
 		var response = pedidoServiceImpl.criar(request);
-
-		/*
-		 * Asserções (verificações do testes => resultado esperado X resultado obtido)
-		 */
-		assertNotNull(response); // verificar se não é null
-		assertEquals(request.getCliente(), response.getCliente()); // verificar se o valor é igual
-
-		/*
-		 * Confirmar que o método send() da mensageria foi chamado exatamente 1 vez no
-		 * componente messageProducerComponent
-		 */
-		verify(messageProducerComponent, times(1)).send(any(Pedido.class));
+		// Verificações
+		assertNotNull(response);
+		assertEquals(request.getCliente(), response.getCliente());
+		// Verifica se salvou a mensagem na outbox
+		verify(outboxMessageRepository, times(1)).save(any(OutboxMessage.class));
 	}
 
 	@Test
@@ -111,7 +112,6 @@ public class PedidoServiceImplTest {
 	@Test
 	@DisplayName("Deve excluir pedido com sucesso.")
 	void testExcluirPedidoComSucesso() {
-
 		UUID id = UUID.randomUUID();
 		PedidoRequest request = gerarPedidoRequest();
 		Pedido pedido = gerarPedido(id, request);
@@ -119,7 +119,6 @@ public class PedidoServiceImplTest {
 		PedidoResponse response = pedidoServiceImpl.excluir(id);
 		assertEquals(id, response.getId());
 		assertEquals(request.getCliente(), response.getCliente());
-
 		verify(pedidoRepository, times(1)).delete(pedido);
 	}
 
@@ -161,41 +160,31 @@ public class PedidoServiceImplTest {
 	void testConsultarPedidoComSucesso() {
 		PedidoRequest request1 = gerarPedidoRequest();
 		PedidoRequest request2 = gerarPedidoRequest();
-		
 		Pedido pedido1 = gerarPedido(UUID.randomUUID(), request1);
 		Pedido pedido2 = gerarPedido(UUID.randomUUID(), request2);
-		
 		List<Pedido> pedidos = Arrays.asList(pedido1, pedido2);
 		Pageable pageable = PageRequest.of(0, 2);
 		Page<Pedido> page = new PageImpl<>(pedidos, pageable, pedidos.size());
-		
 		when(pedidoRepository.findAll(pageable)).thenReturn(page);
-		
 		Page<PedidoResponse> responsePage = pedidoServiceImpl.consultar(pageable);
-		
 		assertNotNull(responsePage);
 		assertEquals(2, responsePage.getContent().size());
 		assertEquals(pedido1.getCliente(), responsePage.getContent().get(0).getCliente());
 		assertEquals(pedido2.getCliente(), responsePage.getContent().get(1).getCliente());
-		
 		verify(pedidoRepository, times(1)).findAll(pageable);
 	}
 
-	// Método para gerar dados de um nova requisição de pedido (dto)
+	// Utilitários
 	private PedidoRequest gerarPedidoRequest() {
-
 		var request = new PedidoRequest();
 		var faker = new Faker();
-
 		request.setCliente(faker.name().fullName());
 		request.setDataHora("2025-07-01");
 		request.setValor(faker.number().randomDouble(2, 1, 1000));
 		request.setStatus(faker.number().numberBetween(0, 4));
-
 		return request;
 	}
 
-	// Método para gerar dados de um novo pedido (entidade)
 	private Pedido gerarPedido(UUID id, PedidoRequest request) {
 		var pedido = modelMapper.map(request, Pedido.class);
 		pedido.setId(id);

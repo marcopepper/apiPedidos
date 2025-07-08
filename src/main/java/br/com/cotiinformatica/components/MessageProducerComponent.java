@@ -5,30 +5,15 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-
-import br.com.cotiinformatica.domain.entities.Pedido;
-
 @Component
 public class MessageProducerComponent {
-
 	@Autowired
 	private RabbitTemplate rabbitTemplate;
-	
+
 	@Autowired
 	private Queue queue;
-	
-	@Autowired
-	private ObjectMapper objectMapper;
-	
-	public void send(Pedido pedido) {
-		try {
-			var json = objectMapper.writeValueAsString(pedido); //serializando em JSON
-			rabbitTemplate.convertAndSend(queue.getName(), json); //gravando na fila
-			
-		} catch (Exception e) {
-			e.printStackTrace(); //TODO Refatorar
-		}
+
+	public void send(String message) throws Exception {
+		rabbitTemplate.convertAndSend(queue.getName(), message); // gravando na fila
 	}
-	
 }

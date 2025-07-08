@@ -17,6 +17,10 @@ services:
           SPRING_DATASOURCE_USERNAME: usuario_apipedidos # Usuário do banco
           SPRING_DATASOURCE_PASSWORD: senha_apipedidos # Senha do banco
           SPRING_RABBITMQ_HOST: rabbitmq # Host do RabbitMQ (nome do serviço)
+          CORS_ALLOWED_ORIGINS: http://angular-web:4200 # servidores com permissão de cors
+          CORS_ALLOWED_METHODS: GET,POST,PUT,DELETE # permissões de métodos
+          CORS_ALLOWED_HEADERS: Authorization,Content-Type # permissões de cabeçalhos
+          ENDPOINTS_APIFATURAMENTOS: http://apifaturamentos:8082/api/v1/faturamentos # endereço do apifaturamentos
 
    postgres: # Nome do serviço
        image: postgres:16 # Imagem oficial do postgresql versão 16
@@ -50,7 +54,8 @@ volumes:
 
 networks:
    apipedidos-network: # Nome da rede
-      driver: bridge # Rede compartilhada
+       driver: bridge # Rede compartilhada
+       external: true #Rede pública
 
 
 

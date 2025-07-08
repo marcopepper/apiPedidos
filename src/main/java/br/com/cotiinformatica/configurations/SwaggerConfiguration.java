@@ -1,27 +1,28 @@
 package br.com.cotiinformatica.configurations;
 
+import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.info.Contact;
+import io.swagger.v3.oas.models.info.Info;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-import io.swagger.v3.oas.models.Components;
-import io.swagger.v3.oas.models.OpenAPI;
-import io.swagger.v3.oas.models.info.Info;
-
 @Configuration
 public class SwaggerConfiguration {
-	
-	@Bean
-	OpenAPI customOpenAPI() {
-		
-		var openApi = new OpenAPI().components(new Components())
-				.info(new Info()
-						.title("API Pedidos - Treinamento TJ/PR")
-						.description("Curso Java Arquiteto - COTI Informática")
-						.version("v1"));
-				
-				
-		return openApi;
-		
-	}
+
+    @Bean
+    OpenAPI customOpenAPI() {
+        return new OpenAPI()
+                .info(new Info()
+                        .title("Pedidos API - Treinamento Java Avançado: Formação Arquiteto")
+                        .version("v1")
+                        .description("Documentação da API do projeto")
+                        .contact(new Contact()
+                                .name("COTI Informática")
+                                .email("contato@cotiinformatica.com.br")));
+    }
 
 }
+
+
+
+
